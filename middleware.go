@@ -92,6 +92,8 @@ func routeLabel(r *http.Request) string {
 		return "/api/contact"
 	case p == "/analytics-config.js":
 		return "/analytics-config.js"
+	case p == "/privacy" || p == "/privacy.html":
+		return "/privacy"
 	case strings.HasPrefix(p, "/assets/"):
 		return "/assets/*"
 	case p == "/" || p == "":
