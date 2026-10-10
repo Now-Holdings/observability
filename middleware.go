@@ -32,6 +32,12 @@ func (w *statusRecorder) Unwrap() http.ResponseWriter {
 	return w.ResponseWriter
 }
 
+func (w *statusRecorder) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 // Handler wraps next with request ID, slog fields, and otelhttp RED/traces.
 func (h *Handle) Handler(next http.Handler) http.Handler {
 	if h == nil {
@@ -55,7 +61,7 @@ func (h *Handle) Handler(next http.Handler) http.Handler {
 			slog.String("method", r.Method),
 			slog.String("path", routeLabel(r)),
 		)
-		ctx := withLogger(withRequestID(r.Context(), id), logger)
+		ctx := withHandle(withLogger(withRequestID(r.Context(), id), logger), h)
 		rec := &statusRecorder{ResponseWriter: w, status: 0}
 		next.ServeHTTP(rec, r.WithContext(ctx))
 		status := rec.status
@@ -77,7 +83,23 @@ func (h *Handle) Handler(next http.Handler) http.Handler {
 		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string {
 			return r.Method + " " + routeLabel(r)
 		}),
+		otelhttp.WithMetricAttributesFn(func(r *http.Request) []attribute.KeyValue {
+			return []attribute.KeyValue{
+				attribute.String("http.route", routeLabel(r)),
+				attribute.String("platform", platformLabel(r)),
+			}
+		}),
 	)
+}
+
+func platformLabel(r *http.Request) string {
+	p := strings.ToLower(strings.TrimSpace(r.Header.Get("X-Client-Platform")))
+	switch p {
+	case "web", "expo_web", "ios", "android":
+		return p
+	default:
+		return "unknown"
+	}
 }
 
 func routeLabel(r *http.Request) string {

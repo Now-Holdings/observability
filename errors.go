@@ -19,6 +19,12 @@ func ReportError(ctx context.Context, err error, attrs ...any) {
 		slog.String("message", err.Error()),
 		slog.String("error", err.Error()),
 	}
+	if h := handleFrom(ctx); h != nil {
+		args = append(args, slog.Group("serviceContext",
+			slog.String("service", h.cfg.ServiceName),
+			slog.String("version", h.cfg.Env),
+		))
+	}
 	args = append(args, attrs...)
 	logger.ErrorContext(ctx, "reported_error", args...)
 }

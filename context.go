@@ -10,6 +10,7 @@ type ctxKey int
 const (
 	ctxRequestID ctxKey = iota
 	ctxLogger
+	ctxHandle
 )
 
 func withRequestID(ctx context.Context, id string) context.Context {
@@ -18,6 +19,18 @@ func withRequestID(ctx context.Context, id string) context.Context {
 
 func withLogger(ctx context.Context, logger *slog.Logger) context.Context {
 	return context.WithValue(ctx, ctxLogger, logger)
+}
+
+func withHandle(ctx context.Context, h *Handle) context.Context {
+	return context.WithValue(ctx, ctxHandle, h)
+}
+
+func handleFrom(ctx context.Context) *Handle {
+	if ctx == nil {
+		return nil
+	}
+	h, _ := ctx.Value(ctxHandle).(*Handle)
+	return h
 }
 
 // RequestID returns the request ID stored on ctx, or empty.

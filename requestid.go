@@ -4,23 +4,22 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
+	"regexp"
 	"strings"
 )
 
 const HeaderRequestID = "X-Request-Id"
 
+// Client-supplied request IDs must be short and log-safe. Oversized or odd
+// values are discarded so they cannot bloat logs or response headers.
+var requestIDRe = regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}$`)
+
 func incomingRequestID(r *http.Request) string {
 	id := strings.TrimSpace(r.Header.Get(HeaderRequestID))
-	if id == "" {
-		id = strings.TrimSpace(r.Header.Get("X-Cloud-Trace-Context"))
-		if i := strings.IndexByte(id, '/'); i > 0 {
-			id = id[:i]
-		}
+	if requestIDRe.MatchString(id) {
+		return id
 	}
-	if id == "" {
-		id = newRequestID()
-	}
-	return id
+	return newRequestID()
 }
 
 func newRequestID() string {

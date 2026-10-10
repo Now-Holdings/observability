@@ -77,7 +77,8 @@ func TestMiddlewareRequestIDAndSlog(t *testing.T) {
 func TestReportErrorJSONType(t *testing.T) {
 	var buf strings.Builder
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	ctx := withLogger(context.Background(), logger)
+	h := &Handle{cfg: Config{ServiceName: "svc", Env: "test"}}
+	ctx := withHandle(withLogger(context.Background(), logger), h)
 	ReportError(ctx, io.EOF)
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(strings.TrimSpace(buf.String())), &payload); err != nil {
@@ -85,6 +86,46 @@ func TestReportErrorJSONType(t *testing.T) {
 	}
 	if payload["@type"] != errorReportingType {
 		t.Fatalf("@type = %v", payload["@type"])
+	}
+	sc, ok := payload["serviceContext"].(map[string]any)
+	if !ok {
+		t.Fatalf("serviceContext missing: %v", payload)
+	}
+	if sc["service"] != "svc" || sc["version"] != "test" {
+		t.Fatalf("serviceContext = %v", sc)
+	}
+}
+
+func TestRouteLabelPrivacyAndCardinality(t *testing.T) {
+	cases := map[string]string{
+		"/privacy":             "/privacy",
+		"/privacy.html":        "/privacy",
+		"/health":              "/health",
+		"/api/contact":         "/api/contact",
+		"/analytics-config.js": "/analytics-config.js",
+		"/assets/app.js":       "/assets/*",
+		"/":                    "/",
+		"/unknown-page":        "/_other",
+	}
+	for path, want := range cases {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		if got := routeLabel(req); got != want {
+			t.Errorf("routeLabel(%q) = %q, want %q", path, got, want)
+		}
+	}
+}
+
+func TestIncomingRequestIDRejectsJunk(t *testing.T) {
+	ok := httptest.NewRequest(http.MethodGet, "/", nil)
+	ok.Header.Set(HeaderRequestID, "qa-request-1")
+	if got := incomingRequestID(ok); got != "qa-request-1" {
+		t.Fatalf("valid id discarded: %q", got)
+	}
+	bad := httptest.NewRequest(http.MethodGet, "/", nil)
+	bad.Header.Set(HeaderRequestID, strings.Repeat("x", 200)+"\n")
+	got := incomingRequestID(bad)
+	if got == "" || len(got) != 32 {
+		t.Fatalf("expected generated hex id, got %q", got)
 	}
 }
 
